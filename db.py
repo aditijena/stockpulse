@@ -50,16 +50,25 @@ def calculate_inventory_risk(df):
     df['Risk Level'] = df['Stock Quantity'].apply(lambda x: "High" if x < 10 else "Low")
     return df
 
-    return df  
 def insert_product(name, category, cost, price, stock):
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
         INSERT INTO products
-        (product_name, category, cost_price, selling_price, initial_stock, current_stock)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        (product_name, category, cost_price, selling_price,
+         initial_stock, current_stock, added_date)
+        VALUES (%s, %s, %s, %s, %s, %s,CURDATE())
     """, (name, category, cost, price, stock, stock))
+
+    product_id = cur.lastrowid
+
+    # 2️⃣ Initialize risk_analysis
+    cur.execute("""
+        INSERT INTO risk_analysis
+        (product_id, days_unsold, risk_level, risk_score, suggested_action)
+        VALUES (%s, 0, 'Low', 10, 'Normal sales')
+    """, (product_id,))
 
     conn.commit()
     conn.close()
