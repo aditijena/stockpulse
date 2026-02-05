@@ -1,4 +1,4 @@
-# 🫀 StockPulse
+#  StockPulse
 
 StockPulse is a Dead Stock Risk Prediction and Recovery System designed to help businesses identify at-risk inventory and take timely recovery actions.
 
