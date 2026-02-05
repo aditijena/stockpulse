@@ -21,14 +21,17 @@ def fetch_inventory():
             p.product_name AS 'Product Name',
             p.category AS 'Category',
             p.current_stock AS 'Stock Quantity',
-            r.days_unsold AS 'Days Unsold',
+            COALESCE(r.days_unsold, 
+                DATEDIFF(CURDATE(), COALESCE(MAX(s.sale_date), p.added_date))
+            ) AS 'Days Unsold',
             r.risk_level AS 'Risk Level',
             r.risk_score AS 'Risk Score (%)',
             r.suggested_action AS 'Suggested Action'
         FROM products p
-        LEFT JOIN risk_analysis r
-        ON p.product_id = r.product_id;
-
+        LEFT JOIN risk_analysis r ON p.product_id = r.product_id
+        LEFT JOIN sales s ON p.product_id = s.product_id
+        GROUP BY p.product_id
+        ORDER BY 'Days Unsold' DESC;
     """
     df = pd.read_sql(query, conn)
     conn.close()

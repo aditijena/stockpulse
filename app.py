@@ -521,134 +521,312 @@ elif st.session_state.page == "Product Management":
 
     st.title("📦 Product Management")
 
-    # ---------- ADD PRODUCT ----------
-    st.subheader("➕ Add Product")
+    st.markdown(
+        """
+        <style>
+        .pm-container {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+        .pm-title {
+            color: #00d4ff;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+        .pm-table {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-    with st.form("add_product_form"):
-        name = st.text_input("Product Name")
-        category = st.text_input("Category")
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            cost = st.number_input("Cost Price", min_value=0)
-        with col2:
-            price = st.number_input("Selling Price", min_value=0)
-        with col3:
-            stock = st.number_input("Initial Stock", min_value=0)
-
-        submitted = st.form_submit_button("Add Product")
-
-    if submitted:
-        if name.strip() == "" or category.strip() == "":
-            st.error("Product Name and Category are required")
-        else:
-            insert_product(name, category, cost, price, stock)
-            st.success("Product added successfully")
-            st.rerun()
-
-    # ---------- PRODUCT LIST ----------
-    st.markdown("---")
-    st.subheader("📋 Product List")
-
-    inventory_df = fetch_inventory()
-    inventory_data = calculate_risk(inventory_df)
-
-    # Header
-    h1, h2, h3, h4, h5 = st.columns([3, 2, 2, 2, 1])
-    h1.markdown("**Product**")
-    h2.markdown("**Category**")
-    h3.markdown("**Stock**")
-    h4.markdown("**Risk**")
-    h5.markdown("**Delete**")
-
-    for _, row in inventory_data.iterrows():
-        c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 2, 1])
-
-        c1.write(row["Product Name"])
-        c2.write(row["Category"])
-        c3.write(row["Stock Quantity"])
+    # Create tabs
+    tab1, tab2 = st.tabs(["➕ Add Product", "📋 View Products"])
+    
+    # ============= TAB 1: ADD PRODUCT =============
+    with tab1:
+        st.markdown(
+            "<div class='pm-container'><div class='pm-title'>📦 Add New Product</div>",
+            unsafe_allow_html=True
+        )
         
-        
-        with c4:
-            # Get the score (default to 0 if missing)
-            score = float(row.get("Risk Score", 0))
+        with st.form("add_product_form"):
+            col1, col2 = st.columns(2)
             
-            progress_val = np.clip(score / 100, 0.0, 1.0)
-           
-            st.write(f"**{row['Risk Level']}**")
-            st.progress(progress_val)
-
-        # Delete Button
-        if c5.button("🗑️", key=f"del_{int(row['product_id'])}"):
-            delete_product(int(row["product_id"]))
-            st.warning("Product deleted")
-            st.rerun()
+            with col1:
+                name = st.text_input("Product Name", placeholder="e.g., Laptop")
+                cost = st.number_input("Cost Price", min_value=0, step=1)
+            
+            with col2:
+                category = st.text_input("Category", placeholder="e.g., Electronics")
+                price = st.number_input("Selling Price", min_value=0, step=1)
+            
+            stock = st.number_input("Initial Stock Quantity", min_value=0, step=1)
+            
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+            
+            with col_btn1:
+                submitted = st.form_submit_button("✅ Add Product", use_container_width=True)
+        
+        if submitted:
+            if name.strip() == "" or category.strip() == "":
+                st.error("❌ Product Name and Category are required")
+            elif cost <= 0 or price <= 0:
+                st.error("❌ Cost and Selling Price must be greater than 0")
+            else:
+                insert_product(name, category, cost, price, stock)
+                st.success("✅ Product added successfully!")
+                st.balloons()
+                st.rerun()
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # ============= TAB 2: VIEW PRODUCTS =============
+    with tab2:
+        st.markdown(
+            "<div class='pm-container'><div class='pm-title'>📋 Product List</div>",
+            unsafe_allow_html=True
+        )
+        
+        inventory_df = fetch_inventory()
+        inventory_data = calculate_risk(inventory_df)
+        
+        if inventory_data.empty:
+            st.warning("📄 No products found. Add a product first.")
+        else:
+            # Prepare data for table
+            table_data = []
+            for _, row in inventory_data.iterrows():
+                days = int(row.get("Days Unsold", 0))
+                risk_level = row['Risk Level']
+                
+                # Color coding for risk
+                if risk_level == "High":
+                    risk_display = f"🔴 {risk_level}"
+                elif risk_level == "Medium":
+                    risk_display = f"🟡 {risk_level}"
+                else:
+                    risk_display = f"🟢 {risk_level}"
+                
+                table_data.append({
+                    "ID": row['product_id'],
+                    "Product Name": row["Product Name"],
+                    "Category": row["Category"],
+                    "Stock": row["Stock Quantity"],
+                    "Days Unsold": days,
+                    "Risk Level": risk_display,
+                    "Risk Score": f"{int(row.get('Risk Score (%)', 0))}%"
+                })
+            
+            # Display table
+            st.markdown("<div class='pm-table'>", unsafe_allow_html=True)
+            table_df = pd.DataFrame(table_data)
+            
+            # Remove ID column from display but keep for delete function
+            display_df = table_df.drop(columns=['ID'])
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Delete section
+            st.markdown("---")
+            st.markdown(
+                "<div class='pm-container'><div class='pm-title'>🗑️ Delete Product</div>",
+                unsafe_allow_html=True
+            )
+            
+            col_del1, col_del2, col_del3 = st.columns([2, 0.6, 3])
+            
+            with col_del1:
+                product_to_delete = st.selectbox(
+                    "Select Product to Delete",
+                    options=table_df['ID'].tolist(),
+                    format_func=lambda x: table_df[table_df['ID'] == x]['Product Name'].values[0],
+                    key="delete_select"
+                )
+            
+            with col_del2:
+                if st.button("🗑️ Delete", use_container_width=True):
+                    delete_product(int(product_to_delete))
+                    st.warning("📋 Product deleted successfully!")
+                    st.rerun()
+            
+            st.markdown("</div>", unsafe_allow_html=True)
 # ---------------- PRODUCT RISK DETAIL ----------------
 elif st.session_state.page == "Product Risk Detail":
-    st.markdown(
-    f"""
+    st.markdown("## 📊 Product Risk Analysis", unsafe_allow_html=True)
+    
+    # --- Custom CSS for metric cards ---
+    st.markdown("""
     <style>
-    .stApp {{
-         background:
-            url("https://images.unsplash.com/photo-1605902711622-cfb43c4437d1");
-        background-size: cover;
-        background-position: center;
-    }}
+    .stApp {
+        background: #000000 !important;
+    }
+    .metric-card {
+        background: rgba(0, 0, 0, 0.6);
+        border: 2px solid #00d4ff;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 10px 0;
+        text-align: center;
+    }
+    .metric-label {
+        color: #b0b0b0;
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+    .metric-value {
+        color: #00d4ff;
+        font-size: 32px;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    .risk-high { color: #ff6b6b; }
+    .risk-medium { color: #ffd93d; }
+    .risk-low { color: #6bcf7f; }
+    .product-info {
+        background: rgba(0, 0, 0, 0.5);
+        border-left: 4px solid #00d4ff;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 15px 0;
+    }
+    .risk-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: bold;
+        margin: 10px 0;
+    }
     </style>
-    """,
-    unsafe_allow_html=True
-)
-    st.markdown('<div class="center-page">', unsafe_allow_html=True)
-
-    st.markdown("## 📌 Product Risk Detail", unsafe_allow_html=True)
-
+    """, unsafe_allow_html=True)
+    
     # --- Product selector ---
     product = st.selectbox(
-        "Select Product",
-        inventory_data["Product Name"].unique()
+        "📦 Select Product",
+        inventory_data["Product Name"].unique(),
+        key="risk_product_selector"
     )
 
     product_data = inventory_data[
         inventory_data["Product Name"] == product
     ].iloc[0]
 
-    # --- Info cards ---
-    col1, col2, col3 = st.columns(3)
-
+    # --- Metric Cards Row 1 ---
+    col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
         st.markdown(f"""
-        <div class="risk-card">
-            <h4>📦 Stock</h4>
-            <h2>{product_data['Stock Quantity']}</h2>
+        <div class="metric-card">
+            <div class="metric-label">📦 Current Stock</div>
+            <div class="metric-value">{int(product_data['Stock Quantity'])}</div>
         </div>
         """, unsafe_allow_html=True)
 
     with col2:
         st.markdown(f"""
-        <div class="risk-card">
-            <h4>⏳ Days Unsold</h4>
-            <h2>{product_data['Days Unsold']}</h2>
+        <div class="metric-card">
+            <div class="metric-label">⏳ Days Unsold</div>
+            <div class="metric-value">{int(product_data['Days Unsold'])}</div>
         </div>
         """, unsafe_allow_html=True)
 
     with col3:
         st.markdown(f"""
-        <div class="risk-card">
-            <h4>⚠️ Risk Level</h4>
-            <h2>{product_data['Risk Level']}</h2>
+        <div class="metric-card">
+            <div class="metric-label">🎯 Risk Score</div>
+            <div class="metric-value">{int(product_data['Risk Score (%)'])}%</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # --- Detailed info ---
+    with col4:
+        risk_level = product_data['Risk Level']
+        risk_class = "risk-high" if risk_level == "High" else "risk-medium" if risk_level == "Medium" else "risk-low"
+        risk_icon = "🔴" if risk_level == "High" else "🟡" if risk_level == "Medium" else "🟢"
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">⚠️ Risk Level</div>
+            <div class="metric-value {risk_class}">{risk_icon} {risk_level}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # --- Product Information ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 📋 Product Information")
+    
+    info_col1, info_col2 = st.columns(2)
+    
+    with info_col1:
+        st.markdown(f"""
+        <div class="product-info">
+            <b>Product Name:</b> {product_data['Product Name']}<br>
+            <b>Category:</b> {product_data['Category']}<br>
+            <b>Current Stock:</b> {int(product_data['Stock Quantity'])} units
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with info_col2:
+        st.markdown(f"""
+        <div class="product-info">
+            <b>Days Without Sale:</b> {int(product_data['Days Unsold'])} days<br>
+            <b>Risk Level:</b> {product_data['Risk Level']}<br>
+            <b>Last Updated:</b> Today
+        </div>
+        """, unsafe_allow_html=True)
+
+    # --- Risk Assessment ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 🔍 Risk Assessment")
+    
+    risk_level = product_data['Risk Level']
+    suggested_action = product_data['Suggested Action']
+    
+    if risk_level == "High":
+        risk_message = "🚨 **HIGH PRIORITY** - This product requires immediate attention. Consider promotional discount or clearance sale."
+        bg_color = "rgba(255, 107, 107, 0.1)"
+        border_color = "#ff6b6b"
+    elif risk_level == "Medium":
+        risk_message = "⚠️ **MEDIUM PRIORITY** - Monitor this product closely. Plan promotional activities or bundling strategies."
+        bg_color = "rgba(255, 217, 61, 0.1)"
+        border_color = "#ffd93d"
+    else:
+        risk_message = "✅ **LOW RISK** - This product is performing well. Continue with current strategy."
+        bg_color = "rgba(107, 207, 127, 0.1)"
+        border_color = "#6bcf7f"
+    
     st.markdown(f"""
-    <div class="risk-card">
-        <h4>📊 Risk Score</h4>
-        <progress value="{product_data['Risk Score (%)']}" max="100"></progress>
-        <p style="margin-top:12px;">
-            Suggested Action: <b>{product_data['Suggested Action']}</b>
-        </p>
+    <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 15px; margin: 15px 0;">
+        {risk_message}<br><br>
+        <b>Suggested Action:</b> {suggested_action}
     </div>
     """, unsafe_allow_html=True)
+
+    # --- Risk Score Progress ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 📈 Risk Score Analysis")
+    
+    risk_score = int(product_data['Risk Score (%)'])
+    st.progress(risk_score / 100)
+    
+    col_s1, col_s2, col_s3 = st.columns(3)
+    with col_s1:
+        st.metric("Days Without Sale", int(product_data['Days Unsold']), "days")
+    with col_s2:
+        st.metric("Units in Stock", int(product_data['Stock Quantity']), "units")
+    with col_s3:
+        st.metric("Risk Score", f"{risk_score}%", "percentile")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -788,6 +966,32 @@ elif st.session_state.page == "My Account":
         """,
         unsafe_allow_html=True
     )
+    
+    st.markdown("""
+    <style>
+    .profile-card {
+        background: rgba(0,0,0,0.6);
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 20px;
+        border-left: 5px solid #00d4ff;
+    }
+    .info-box {
+        background: rgba(255,255,255,0.05);
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        border: 1px solid rgba(0,212,255,0.3);
+    }
+    .section-title {
+        color: #00d4ff;
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 15px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     st.title("👤 My Account")
 
     user = st.session_state.get("user")
@@ -795,49 +999,179 @@ elif st.session_state.page == "My Account":
     if not user:
         st.warning("User data not found. Please re-login.")
         st.stop()
-
-    st.subheader("📄 Profile Information")
-
-    st.write("**Name:**", user["name"])
-    st.write("**Username:**", user["username"])
-    st.write("**Role:**", user["role"])
-    st.write("**Date of Birth:**", user["dob"])
-    st.write("**Occupation:**", user["occupation"])
-    st.write("**Phone:**", user["phone"])
-    st.write("**Address:**", user["address"])
-    st.write("**City:**", user["city"])
-    st.write("**State:**", user["state"])
-    st.write("**Country:**", user["country"])
-
-    st.markdown("---")
-    st.subheader("✏️ Edit Profile")
-
-    new_name = st.text_input("Full Name", value=user["name"])
-    new_occupation = st.text_input("Occupation", value=user["occupation"])
-    new_phone = st.text_input("Phone", value=user["phone"])
-    new_address = st.text_area("Address", value=user["address"])
-
-    if st.button("Update Profile"):
-        update_user_profile(
-            user["user_id"],
-            new_name,
-            new_occupation,
-            new_phone,
-            new_address
+    
+    # Create tabs for View and Edit
+    tab1, tab2 = st.tabs(["📋 View Profile", "✏️ Edit Profile"])
+    
+    # ============= TAB 1: VIEW PROFILE =============
+    with tab1:
+        st.markdown(
+            f"""
+            <div class="profile-card">
+                <div class="section-title">👤 Personal Information</div>
+                <div class="info-box">
+                    <b>Name:</b> {user['name']}
+                </div>
+                <div class="info-box">
+                    <b>Username:</b> {user['username']}
+                </div>
+                <div class="info-box">
+                    <b>Role:</b> <span style="color:#00d4ff;">{user['role'].upper()}</span>
+                </div>
+                <div class="info-box">
+                    <b>Date of Birth:</b> {user['dob'] if user['dob'] else 'Not provided'}
+                </div>
+            </div>
+            """, unsafe_allow_html=True
         )
-
-        st.session_state.user.update({
-            "name": new_name,
-            "occupation": new_occupation,
-            "phone": new_phone,
-            "address": new_address
-        })
-
-        st.success("Profile updated")
-
-    if st.button("Logout"):
-        st.session_state.clear()
-        st.rerun()
+        
+        st.markdown(
+            f"""
+            <div class="profile-card">
+                <div class="section-title">💼 Professional & Contact</div>
+                <div class="info-box">
+                    <b>Occupation:</b> {user['occupation'] if user['occupation'] else 'Not provided'}
+                </div>
+                <div class="info-box">
+                    <b>Phone:</b> {user['phone'] if user['phone'] else 'Not provided'}
+                </div>
+            </div>
+            """, unsafe_allow_html=True
+        )
+        
+        st.markdown(
+            f"""
+            <div class="profile-card">
+                <div class="section-title">📍 Address & Location</div>
+                <div class="info-box">
+                    <b>Address:</b> {user['address'] if user['address'] else 'Not provided'}
+                </div>
+                <div class="info-box">
+                    <b>City:</b> {user['city'] if user['city'] else 'Not provided'}
+                </div>
+                <div class="info-box">
+                    <b>State:</b> {user['state'] if user['state'] else 'Not provided'}
+                </div>
+                <div class="info-box">
+                    <b>Country:</b> {user['country'] if user['country'] else 'Not provided'}
+                </div>
+            </div>
+            """, unsafe_allow_html=True
+        )
+        
+        # Account info
+        st.markdown(
+            f"""
+            <div class="profile-card">
+                <div class="section-title">ℹ️ Account Details</div>
+                <div class="info-box">
+                    <b>Member Since:</b> {user['created_at']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True
+        )
+    
+    # ============= TAB 2: EDIT PROFILE =============
+    with tab2:
+        st.markdown(
+            "<div class='profile-card'><div class='section-title'>✏️ Update Your Information</div></div>",
+            unsafe_allow_html=True
+        )
+        
+        st.markdown("<div class='section-title' style='margin-top:20px;margin-bottom:15px;'>👤 Personal Details</div>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            new_name = st.text_input("Full Name", value=user["name"], key="edit_name")
+        
+        with col2:
+            dob = st.date_input("Date of Birth", value=user["dob"] if user["dob"] else None, key="edit_dob")
+        
+        new_occupation = st.text_input("Occupation", value=user["occupation"] or "", key="edit_occupation")
+        
+        st.markdown("<div class='section-title' style='margin-top:25px;margin-bottom:15px;'>📞 Contact Information</div>", unsafe_allow_html=True)
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            new_phone = st.text_input("Phone Number", value=user["phone"] or "", key="edit_phone")
+        
+        with col4:
+            pass
+        
+        new_address = st.text_area("Address", value=user["address"] or "", height=100, key="edit_address")
+        
+        st.markdown("<div class='section-title' style='margin-top:25px;margin-bottom:15px;'>📍 Location</div>", unsafe_allow_html=True)
+        col5, col6, col7 = st.columns(3)
+        
+        with col5:
+            new_city = st.text_input("City", value=user["city"] or "", key="edit_city")
+        
+        with col6:
+            new_state = st.text_input("State", value=user["state"] or "", key="edit_state")
+        
+        with col7:
+            new_country = st.text_input("Country", value=user["country"] or "", key="edit_country")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        col_btn1, col_spacer, col_btn2, col_spacer2, col_btn3 = st.columns([1.2, 0.3, 1, 0.3, 1])
+        
+        with col_btn1:
+            if st.button("💾 Save Changes", key="save_btn"):
+                # Sanitize inputs
+                def _clean(val):
+                    if val is None or (isinstance(val, str) and val.strip() == ""):
+                        return None
+                    return val.strip() if isinstance(val, str) else val
+                
+                clean_name = _clean(new_name)
+                clean_occupation = _clean(new_occupation)
+                clean_phone = _clean(new_phone)
+                clean_address = _clean(new_address)
+                clean_city = _clean(new_city)
+                clean_state = _clean(new_state)
+                clean_country = _clean(new_country)
+                clean_dob = dob.isoformat() if dob else None
+                
+                conn = get_connection()
+                cur = conn.cursor()
+                try:
+                    cur.execute("""
+                        UPDATE users 
+                        SET name=%s, occupation=%s, phone=%s, address=%s, city=%s, state=%s, country=%s, dob=%s
+                        WHERE user_id=%s
+                    """, (clean_name, clean_occupation, clean_phone, clean_address, clean_city, clean_state, clean_country, clean_dob, user["user_id"]))
+                    conn.commit()
+                    
+                    st.session_state.user.update({
+                        "name": clean_name,
+                        "occupation": clean_occupation,
+                        "phone": clean_phone,
+                        "address": clean_address,
+                        "city": clean_city,
+                        "state": clean_state,
+                        "country": clean_country,
+                        "dob": clean_dob
+                    })
+                    st.success("✅ Profile updated successfully!")
+                    st.balloons()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error updating profile: {str(e)}")
+                finally:
+                    cur.close()
+                    conn.close()
+        
+        with col_btn2:
+            if st.button("🔄 Reset", key="reset_btn"):
+                st.rerun()
+        
+        with col_btn3:
+            if st.button("🚪 Logout", key="logout_btn"):
+                st.session_state.clear()
+                st.rerun()
 
 
 
