@@ -3,16 +3,37 @@ GRANT ALL PRIVILEGES ON stockpulse_db.* TO 'stockuser'@'localhost';
 FLUSH PRIVILEGES; 
 CREATE DATABASE stockpulse_db; 
 USE stockpulse_db;
+SET GLOBAL net_read_timeout=600;
+SET GLOBAL net_write_timeout=600;
+
+
+DROP TABLE IF EXISTS users;
 
 CREATE TABLE users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
+
+    name VARCHAR(100) NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    role ENUM('admin','viewer') DEFAULT 'admin'
+    password VARCHAR(50) NOT NULL,
+
+    dob DATE NULL,
+    occupation VARCHAR(100) NULL,
+    phone VARCHAR(15) NULL,
+
+    address TEXT NULL,
+    city VARCHAR(50) NULL,
+    state VARCHAR(50) NULL,
+    country VARCHAR(50) NULL,
+
+    role ENUM('admin','viewer') DEFAULT 'viewer',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO users (username, password)
-VALUES ('admin', 'admin123');
+
+
+INSERT INTO users (name, username, password, role)
+VALUES ('Admin User', 'admin', 'admin123', 'admin');
+
 
 CREATE TABLE products (
     product_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -96,6 +117,7 @@ GROUP BY p.product_id;
 DROP TABLE IF EXISTS risk_analysis;
 DROP TABLE IF EXISTS sales;
 DROP TABLE IF EXISTS products;
+DROP TABLE users;
 SET SQL_SAFE_UPDATES = 0;
 
 UPDATE risk_analysis
@@ -125,7 +147,9 @@ FROM products p
 LEFT JOIN sales s ON p.product_id = s.product_id
 GROUP BY p.product_id;
 
-select * from sales
+
+drop table user
+
 
 
 

@@ -1,6 +1,8 @@
 from db import get_connection
+from db import create_user, get_user, get_user_by_username, update_user_profile
 from db import fetch_inventory, insert_product
 import streamlit as st
+from signup import signup_page
 import numpy as np
 from io import StringIO
 import pydeck as pdk
@@ -13,7 +15,10 @@ import pandas as pd
 def img_to_base64(path):
     with open(path, "rb") as img:
         return base64.b64encode(img.read()).decode()
-    
+
+
+
+
 def calculate_risk(df):
     def risk(row):
         if pd.isna(row["Days Unsold"]):
@@ -117,7 +122,18 @@ if "logged_in" not in st.session_state:
 if "forgot" not in st.session_state:
     st.session_state.forgot = False
 
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if "page" not in st.session_state:
+    st.session_state.page = "login"
+
+#------------------SIGNUP PAGE-----------------
+elif st.session_state.page == "signup":
+    signup_page()
+
 # ---------------- LOGIN PAGE ----------------
+
 st.markdown("""
 <style>
 /* Remove Streamlit default padding */
@@ -185,7 +201,7 @@ div[data-testid="stButton"] button {
 </style>
 """, unsafe_allow_html=True)
 
-    
+   
 if not st.session_state.logged_in:
 
     st.markdown("""
@@ -200,55 +216,67 @@ if not st.session_state.logged_in:
     st.markdown("<div style='max-width:320px;margin:auto;'>", unsafe_allow_html=True)
 
     if not st.session_state.forgot:
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
+        username = st.text_input("Username", key="login_username")
+        password = st.text_input("Password", type="password",key="login_password")
 
-        if st.button("Login", use_container_width=True):
-            if username == "admin" and password == "admin":
-                st.session_state.logged_in = True
+        if st.button("Login", key="login_btn",use_container_width=True):
+            if username and password:
+                user = get_user(username, password)
+                if user:
+                    st.session_state.logged_in = True
+                    st.session_state.user = user
+                    st.success(f"Welcome {user['name']}!")
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
             else:
-                st.error("Invalid credentials")
+                st.error("Please enter username and password")
 
-        if st.button("Forgot Password?"):
+        if st.button("Forgot Password?",key="forgot_btn"):
             st.session_state.forgot = True
             st.experimental_rerun()
 
     else:
-        email = st.text_input("Enter registered email")
+        email = st.text_input("Enter registered email",key="forgot_email")
 
-        if st.button("Send Reset Link", use_container_width=True):
-            st.success("Password reset link sent (demo)")
+        if st.button("Send Reset Link", use_container_width=True, key="send_reset"):
+            st.success("Password reset link sent")
 
         if st.button("Back to Login"):
             st.session_state.forgot = False
             st.experimental_rerun()
+    st.markdown("Don't have an account?")
+    if st.button("Sign up", key="goto_signup"):
+        st.session_state.page = "signup"
+        st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 # ---------------- SIDEBAR NAVIGATION ----------------
-st.sidebar.markdown("""
-<div style="text-align:center;">
-    <h2>📦 StockSense</h2>
-    <p style="color:gray;">Dead Stock Analyzer</p>
-</div>
-<hr>
-""", unsafe_allow_html=True)
+if st.session_state.get("logged_in"):
 
-st.sidebar.title("📦 StockSense Local")
+    st.sidebar.markdown("""
+    <div style="text-align:center;">
+        <h2>📦 StockSense</h2>
+        <p style="color:gray;">Dead Stock Analyzer</p>
+    </div>
+    <hr>
+    """, unsafe_allow_html=True)
 
-menu = st.sidebar.radio(
-    "Navigation",
-    [
-        "Dashboard",
-        "Analytics",
-        "Product Management",
-        "Product Risk Detail",
-        "Reports & Export"
-    ]
-)
+    menu = st.sidebar.radio(
+        "Navigation",
+        [
+            "Dashboard",
+            "Analytics",
+            "Product Management",
+            "Product Risk Detail",
+            "Reports & Export",
+            "My Account"
+        ]
+    )
 
-st.session_state.page = menu
+    st.session_state.page = menu
 
 # ---------------- DASHBOARD ----------------
 img_total = img_to_base64("images/total.jpg")
@@ -400,7 +428,8 @@ if st.session_state.page == "Dashboard":
 
 # ---------------- ANALYTICS PAGE ----------------
 elif st.session_state.page == "Analytics":
-    # --- Background ---
+
+    # --- Page-scoped Background (NO UI bleeding) ---
     st.markdown(
         """
         <style>
@@ -413,61 +442,66 @@ elif st.session_state.page == "Analytics":
         """,
         unsafe_allow_html=True
     )
-  
+
     st.title("📈 Inventory Analytics")
-   
-    # Always fetch fresh data
+
+    # --- Fetch inventory (no risk dependency) ---
     inventory_df = fetch_inventory()
-    inventory_data = calculate_risk(inventory_df)
+
+    if inventory_df.empty:
+        st.warning("No inventory data available")
+        st.stop()
 
     col1, col2 = st.columns(2)
 
-     
+    # ---------------- LEFT COLUMN ----------------
     with col1:
-       st.subheader("⚠️ Dead Stock by Category")
+        st.subheader("📦 Stock Distribution by Category")
 
-    dead_stock = inventory_data[
-        inventory_data["Risk Level"].str.strip().str.lower() == "high"
-    ]
-
-    if dead_stock.empty:
-        st.info("No high-risk (dead stock) products found.")
-    else:
-        dead_stock_summary = (
-            dead_stock
+        category_summary = (
+            inventory_df
             .groupby("Category")["Stock Quantity"]
             .sum()
             .reset_index()
         )
 
         st.bar_chart(
-            dead_stock_summary.set_index("Category")["Stock Quantity"]
+            category_summary.set_index("Category")["Stock Quantity"]
         )
 
-   
+    # ---------------- RIGHT COLUMN ----------------
     with col2:
-        st.subheader("📉 Sales Trend (Demo)")
+        st.subheader("📉 Sales Trend")
 
-        # Demo data (replace later with real sales)
-        sales = [120, 100, 90, 60, 40]
-        st.line_chart(sales)
+        sales_demo = {
+            "Jan": 120,
+            "Feb": 100,
+            "Mar": 90,
+            "Apr": 60,
+            "May": 40
+        }
 
-    st.title("India Map")
+        sales_df = pd.DataFrame.from_dict(
+            sales_demo, orient="index", columns=["Sales"]
+        )
 
-    df = pd.DataFrame(
-    {
-        # India latitude range
-        "col1": rng(0).standard_normal(1000) / 20 + 22.5,
+        st.line_chart(sales_df)
 
-        # India longitude range
-        "col2": rng(1).standard_normal(1000) / 20 + 78.9,
+  
+    st.markdown("---")
+    st.subheader("🗺️ India Activity Map")
 
-        "col3": rng(2).standard_normal(1000) * 100,
-        "col4": rng(3).standard_normal((1000, 4)).tolist(),
-    }
-)
+    rng = np.random.default_rng(42)
 
-    st.map(df, latitude="col1", longitude="col2", size="col3", color="col4")
+    map_df = pd.DataFrame({
+        "lat": rng.standard_normal(500) / 15 + 22.5,   # India latitude
+        "lon": rng.standard_normal(500) / 15 + 78.9,   # India longitude
+        "size": rng.random(500) * 100
+    })
+
+    st.map(map_df, latitude="lat", longitude="lon", size="size")
+
+    st.stop()
 
 # ---------------- PRODUCT MANAGEMENT ----------------
 elif st.session_state.page == "Product Management":
@@ -681,6 +715,132 @@ elif st.session_state.page == "Reports & Export":
     uploaded_files = st.file_uploader(
         "Upload data", accept_multiple_files=True, type="csv"
     )
+#-----------------Router-----------------
+def login_page():
+    st.title("Login")
+
+def dashboard_page():
+    st.title("Dashboard")
+
+def analytics_page():
+    st.title("Analytics")
+
+def product_management_page():
+    st.title("Product Management")
+
+def product_risk_page():
+    st.title("Product Risk Detail")
+
+def reports_page():
+    st.title("Reports & Export")
+
+# 🔐 Auth guard
+if not st.session_state.logged_in and st.session_state.page not in ["login", "signup"]:
+    login_page()
+    st.stop()
+
+# 📍 Page routing
+if st.session_state.page == "login":
+    login_page()
+
+elif st.session_state.page == "signup":
+    st.title("📝 Sign Up")
+
+    name = st.text_input("Full Name")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    confirm = st.text_input("Confirm Password", type="password")
+
+    if st.button("Create Account", key="signup_btn"):
+        if password != confirm:
+            st.error("Passwords do not match")
+        else:
+            create_user(name, username, password)
+            st.success("Account created! Please login.")
+            st.session_state.page = "login"
+            st.rerun()
+
+    if st.button("Back to Login"):
+        st.session_state.page = "login"
+        st.rerun()
+
+elif st.session_state.page == "Dashboard":
+    dashboard_page()
+
+#------------------ACCOUNT PAGE-------------------
+
+elif st.session_state.page == "My Account":
+    st.markdown(
+        """
+        <style>
+        .stApp {
+             background:
+                url("https://images.unsplash.com/photo-1605902711622-cfb43c4437d1");
+             background-color: rgba(255, 255, 255, 0.0);
+            background-size: cover;
+            background-position: center;
+        }
+         /* Make main container transparent */
+        .css-18e3th9 {
+            background-color: rgba(255, 255, 255, 0.0);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    st.title("👤 My Account")
+
+    user = st.session_state.get("user")
+
+    if not user:
+        st.warning("User data not found. Please re-login.")
+        st.stop()
+
+    st.subheader("📄 Profile Information")
+
+    st.write("**Name:**", user["name"])
+    st.write("**Username:**", user["username"])
+    st.write("**Role:**", user["role"])
+    st.write("**Date of Birth:**", user["dob"])
+    st.write("**Occupation:**", user["occupation"])
+    st.write("**Phone:**", user["phone"])
+    st.write("**Address:**", user["address"])
+    st.write("**City:**", user["city"])
+    st.write("**State:**", user["state"])
+    st.write("**Country:**", user["country"])
+
+    st.markdown("---")
+    st.subheader("✏️ Edit Profile")
+
+    new_name = st.text_input("Full Name", value=user["name"])
+    new_occupation = st.text_input("Occupation", value=user["occupation"])
+    new_phone = st.text_input("Phone", value=user["phone"])
+    new_address = st.text_area("Address", value=user["address"])
+
+    if st.button("Update Profile"):
+        update_user_profile(
+            user["user_id"],
+            new_name,
+            new_occupation,
+            new_phone,
+            new_address
+        )
+
+        st.session_state.user.update({
+            "name": new_name,
+            "occupation": new_occupation,
+            "phone": new_phone,
+            "address": new_address
+        })
+
+        st.success("Profile updated")
+
+    if st.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+
+
+
 # ---------------- FOOTER ----------------
 st.markdown("---")
 st.caption("StockSense Local – Frontend Prototype | MySQL Backend Planned")

@@ -1,6 +1,8 @@
 import mysql.connector
 import pandas as pd
 
+
+
 # ---------------- DB CONNECTION ----------------
 def get_connection():
     return mysql.connector.connect(
@@ -72,3 +74,143 @@ def insert_product(name, category, cost, price, stock):
 
     conn.commit()
     conn.close()
+
+# ---------------- USER AUTH ----------------
+
+def get_user(username, password):
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute(
+        "SELECT * FROM users WHERE username=%s AND password=%s",
+        (username, password)
+    )
+    user = cur.fetchone()
+
+    conn.close()
+    return user
+
+
+import mysql.connector
+
+def create_user(name, username, password, dob, occupation, phone, address, city, state, country):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        # sanitize inputs: convert empty strings to None so DB stores NULL
+        def _none_if_empty(v):
+            if v is None:
+                return None
+            if isinstance(v, str) and v.strip() == "":
+                return None
+            return v
+
+        # normalize dob: if it's a date object convert to ISO string, else keep None
+        dob_val = dob
+        try:
+            # handle streamlit date_input which returns datetime.date
+            if hasattr(dob, 'isoformat'):
+                dob_val = dob.isoformat()
+        except Exception:
+            dob_val = None
+
+        vals = (
+            _none_if_empty(name),
+            _none_if_empty(username),
+            _none_if_empty(password),
+            _none_if_empty(dob_val),
+            _none_if_empty(occupation),
+            _none_if_empty(phone),
+            _none_if_empty(address),
+            _none_if_empty(city),
+            _none_if_empty(state),
+            _none_if_empty(country),
+        )
+
+        cur.execute("""
+            INSERT INTO users
+            (name, username, password, dob, occupation, phone, address, city, state, country)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, vals)
+
+        conn.commit()
+        return True, "Account created successfully"
+
+    except mysql.connector.IntegrityError as e:
+        conn.rollback()
+
+        # duplicate username
+        if "username" in str(e).lower():
+            return False, "Username already exists"
+        else:
+            return False, "Database integrity error"
+
+    except Exception as e:
+        conn.rollback()
+        return False, f"Error: {str(e)}"
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+
+def get_user_by_username(username):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        "SELECT user_id, name, username, password FROM users WHERE username = %s",
+        (username,)
+    )
+
+    user = cursor.fetchone()
+    conn.close()
+    return user
+
+
+def update_user_name(user_id, new_name):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        "UPDATE users SET name = %s WHERE user_id = %s",
+        (new_name, user_id)
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def update_user_profile(user_id, name, occupation, phone, address):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            UPDATE users 
+            SET name=%s, occupation=%s, phone=%s, address=%s 
+            WHERE user_id=%s
+        """, (name, occupation, phone, address, user_id))
+
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
+# TEMP FUNCTION - Get all users
+def get_all_users():
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    cur.execute("SELECT * FROM users")
+    users = cur.fetchall()
+    
+    conn.close()
+    return users
