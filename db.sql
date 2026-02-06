@@ -147,7 +147,7 @@ FROM products p
 LEFT JOIN sales s ON p.product_id = s.product_id
 GROUP BY p.product_id;
 
-
+ALTER TABLE users ADD COLUMN email VARCHAR(255);
 drop table user
 
 

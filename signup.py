@@ -19,6 +19,7 @@ def signup_page():
 
     name = st.text_input("Full Name")
     username = st.text_input("Username")
+    email = st.text_input("Email Address")
     password = st.text_input("Password", type="password")
     confirm = st.text_input("Confirm Password", type="password")
 
@@ -42,7 +43,7 @@ def signup_page():
 
         # 🔴 IMPORTANT FIX: handle DB response
         success, msg = create_user(
-            name, username, password,
+            name, username, email, password,
             dob, occupation, phone,
             address, city, state, country
         )
